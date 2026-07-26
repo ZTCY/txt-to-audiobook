@@ -1,6 +1,5 @@
 <p align="center">
-  <img src="assets/sticker1.png" width="100" align="top" alt="">
-  <img src="assets/sticker3.png" width="100" align="top" alt="">
+  <img src="assets/sticker1.png" width="100" alt="">
 </p>
 
 <h1 align="center">🎧 txt-to-audiobook</h1>
@@ -141,7 +140,7 @@ txt-to-audiobook/
 ## 架构
 
 ```mermaid
-graph LR
+graph TD
     A[TXT 文件] --> B[parser.py<br/>清洗 + 分章]
     B --> C[pipeline.py<br/>编排 + 缓存]
     C --> D[tts/edge.py<br/>Edge TTS 合成]
@@ -153,8 +152,6 @@ graph LR
 
 ## 音质增强
 
-<p align="center"><img src="assets/sticker4.png" width="70" alt=""></p>
-
 Edge TTS 免费接口上限为 96kbps / 24kHz。本项目通过 ffmpeg 后处理提升听感：
 
 | 指标 | Edge TTS 原始 | 增强后 |
@@ -164,15 +161,6 @@ Edge TTS 免费接口上限为 96kbps / 24kHz。本项目通过 ffmpeg 后处理
 | 响度 | 不一致 | EBU R128 标准化 |
 
 > 需要系统安装 [ffmpeg](https://ffmpeg.org/download.html)。未安装时自动降级为原始输出，不影响使用。
-
-## 背景图
-
-<p><img src="assets/sticker2.png" width="60" align="right" alt=""></p>
-
-`assets/bg.png` 是 Web UI 的全屏背景。直接替换文件即可换肤，无需改代码。
-
-- 建议暗色调，1920×1080+，PNG 格式，< 2MB
-- CSS：`background: var(--bg-deep) url('/assets/bg.png') center top / cover fixed no-repeat;`
 
 ## 常见问题
 

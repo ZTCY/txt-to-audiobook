@@ -10,8 +10,7 @@ cd /d "%~dp0"
 echo Starting...
 echo.
 
-set PYTHONPATH=%~dp0src;%PYTHONPATH%
-py -m txt_to_audiobook.cli %*
+python -m txt_to_audiobook.cli %*
 
 echo.
 echo ==========================================

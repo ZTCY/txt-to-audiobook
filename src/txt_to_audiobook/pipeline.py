@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Callable, List, Optional
 
 from .config import TEMP_DIR
-from .exporter import generate_manifest, merge_audio_files, save_manifest
+from .exporter import enhance_audio, generate_manifest, merge_audio_files, save_manifest
 from .models import Chapter, Chunk, ConversionConfig, ConversionResult
 from .parser import clean_text, sanitize_filename, split_chapters, split_text_into_chunks
 from .tts.base import TTSProvider
@@ -210,7 +210,7 @@ class AudiobookPipeline:
         )
 
         if len(chunks) == 1:
-            # Short chapter — synthesize directly to the output file
+            # Short chapter — synthesize, then enhance
             if output_path.exists():
                 # Cache hit: already generated
                 return ConversionResult(
@@ -221,7 +221,13 @@ class AudiobookPipeline:
                     success=True,
                 )
             try:
-                await self.tts.synthesize(chunks[0].text, output_path, self.config.voice, self.config.rate)
+                # Synthesize to temp file first, then enhance
+                raw_path = temp_dir / f"raw_{real_chapter_num:03d}.mp3"
+                await self.tts.synthesize(chunks[0].text, raw_path, self.config.voice, self.config.rate)
+                if not enhance_audio(raw_path, output_path):
+                    # ffmpeg not available — just move the raw file
+                    raw_path.replace(output_path)
+                raw_path.unlink(missing_ok=True)
                 success = True
                 error = None
             except Exception as exc:

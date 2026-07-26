@@ -1,6 +1,8 @@
 <p align="center">
-  <h1>🎧 txt-to-audiobook</h1>
+  <img src="assets/sticker1.png" width="120" alt="sticker">
 </p>
+
+<h1 align="center">🎧 txt-to-audiobook</h1>
 
 <p align="center">
   <strong>把 TXT 小说转成 MP3 有声书，用 Edge TTS 免费合成，零 API Key</strong>
@@ -18,12 +20,12 @@
 
 ---
 
-## Quick Start
+## 快速开始
 
 ```bash
 git clone https://github.com/ZTCY/txt-to-audiobook.git
 cd txt-to-audiobook
-pip install edge-tts tqdm fastapi uvicorn python-multipart
+pip install edge-tts tqdm fastapi uvicorn python-multipart websockets
 ```
 
 把 TXT 扔进 `txt_input/`，然后：
@@ -41,7 +43,7 @@ python -m txt_to_audiobook.cli -i txt_input/novel.txt --voice zh-CN-YunxiNeural
 
 浏览器打开 `http://127.0.0.1:8081`，拖拽 TXT 文件、选语音、开始转换。
 
-> Windows 用户可以双击 `run_web.bat` 或 `run_cli.bat`。
+> Windows 用户可以双击 `run_web.bat` 或 `run_cli.bat`，自动检测 Python、安装依赖、杀端口冲突。
 
 MP3 输出在 `output/[书名]/`。
 
@@ -51,21 +53,22 @@ MP3 输出在 `output/[书名]/`。
 - **长章分块** — 超过 1000 字的章节按标点断句，逐块合成后合并
 - **断点续跑** — 已完成的 chunk 自动跳过，中断不浪费
 - **实时控制** — 转换中随时暂停 / 继续 / 跳过 / 终止
-- **6 种语音** — 云希、晓晓、晓伊、云扬、晓辰、云枫
+- **6 种语音** — 云希、晓晓、晓伊、云扬、云健、云夏
 - **语速调节** — `-20%` 到 `+20%`
 - **章节范围** — 只转指定区间
+- **ffmpeg 后处理** — 升频 48kHz / 320kbps + EBU R128 响度标准化
 - **manifest.json** — 记录配置、耗时、成功/失败
 
 ## 语音列表
 
 | 语音 | Short Name | 性别 | 风格 |
 |------|-----------|------|------|
-| 云希 ⭐ | `zh-CN-YunxiNeural` | 男 | 温柔（默认） |
-| 晓晓 | `zh-CN-XiaoxiaoNeural` | 女 | 温柔 |
+| 云希 ⭐ | `zh-CN-YunxiNeural` | 男 | 阳光（默认） |
+| 晓晓 | `zh-CN-XiaoxiaoNeural` | 女 | 温暖 |
 | 晓伊 | `zh-CN-XiaoyiNeural` | 女 | 活泼 |
-| 晓辰 | `zh-CN-XiaochenNeural` | 女 | 成熟 |
-| 云扬 | `zh-CN-YunyangNeural` | 男 | 新闻播报 |
-| 云枫 | `zh-CN-YunfengNeural` | 男 | 低沉 |
+| 云扬 | `zh-CN-YunyangNeural` | 男 | 专业 |
+| 云健 | `zh-CN-YunjianNeural` | 男 | 热血 |
+| 云夏 | `zh-CN-YunxiaNeural` | 男 | 可爱 |
 
 语速建议：
 
@@ -120,16 +123,17 @@ txt-to-audiobook/
 │   ├── models.py         # dataclass 数据模型
 │   ├── parser.py         # 文本清洗、章节检测、分块
 │   ├── pipeline.py       # 编排：暂停/停止、缓存、manifest
-│   ├── exporter.py       # MP3 合并
+│   ├── exporter.py       # MP3 合并 + ffmpeg 后处理
 │   ├── tts/
 │   │   ├── base.py       # TTSProvider 抽象接口
 │   │   └── edge.py       # Edge TTS 实现（重试 + 指数退避）
 │   └── templates/
 │       └── index.html    # Web UI 前端
-├── tests/                # 单元测试
+├── assets/               # 背景图、截图、表情贴纸
+├── tests/                # 单元测试（40 个）
 ├── examples/sample_zh.txt
-├── run_web.bat
-├── run_cli.bat
+├── run_web.bat           # Windows 一键启动 Web UI
+├── run_cli.bat           # Windows 一键启动 CLI
 └── LICENSE
 ```
 
@@ -140,11 +144,41 @@ graph LR
     A[TXT 文件] --> B[parser.py<br/>清洗 + 分章]
     B --> C[pipeline.py<br/>编排 + 缓存]
     C --> D[tts/edge.py<br/>Edge TTS 合成]
-    D --> E[exporter.py<br/>合并 MP3]
+    D --> E[exporter.py<br/>ffmpeg 合并 + 增强音质]
     E --> F[output/<br/>MP3 + manifest.json]
 ```
 
 `TTSProvider` 是抽象接口，目前只有 `EdgeTTSProvider`。要接其他 TTS 引擎，只需新建实现类，pipeline 不用改。
+
+## 音质增强
+
+Edge TTS 免费接口上限为 96kbps / 24kHz。本项目通过 ffmpeg 后处理提升听感：
+
+| 指标 | Edge TTS 原始 | 增强后 |
+|------|-------------|--------|
+| 比特率 | 96kbps | 320kbps |
+| 采样率 | 24kHz | 48kHz |
+| 响度 | 不一致 | EBU R128 标准化 |
+
+> 需要系统安装 [ffmpeg](https://ffmpeg.org/download.html)。未安装时自动降级为原始输出，不影响使用。
+
+## Web UI 表情贴纸
+
+转换过程中，界面右下角的角色会根据状态切换表情：
+
+| 贴纸 | 状态 | 表情 |
+|------|------|------|
+| <img src="assets/sticker1.png" width="60"> | 就绪 / 完成 | 开心点赞 |
+| <img src="assets/sticker2.png" width="60"> | 暂停 | 温柔微笑 |
+| <img src="assets/sticker3.png" width="60"> | 转换中 | 托腮聆听 |
+| <img src="assets/sticker4.png" width="60"> | 错误 | 惊喜星星眼 |
+
+## 背景图
+
+`assets/bg.png` 是 Web UI 的全屏背景。直接替换文件即可换肤，无需改代码。
+
+- 建议暗色调，1920×1080+，PNG 格式，< 2MB
+- CSS：`background: var(--bg-deep) url('/assets/bg.png') center top / cover fixed no-repeat;`
 
 ## 常见问题
 
@@ -175,6 +209,12 @@ TXT 的章节标题必须是「第X章」「第X回」「Chapter X」「第X节�
 set PYTHONPATH=src
 python -m txt_to_audiobook.cli
 ```
+</details>
+
+<details>
+<summary>试听音质比转换出来的差？</summary>
+
+试听和转换输出都走相同的 ffmpeg 增强流程。如果试听听起来差，可能是浏览器缓存了旧版音频，Ctrl+F5 强刷一下。
 </details>
 
 ## 致谢

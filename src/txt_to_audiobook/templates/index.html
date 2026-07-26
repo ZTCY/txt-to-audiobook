@@ -45,7 +45,7 @@
       radial-gradient(circle at 10% 20%, rgba(255, 160, 220, 0.12) 0%, transparent 25%),
       radial-gradient(circle at 80% 70%, rgba(99, 140, 255, 0.1) 0%, transparent 30%),
       radial-gradient(circle at 50% 50%, rgba(77, 240, 181, 0.05) 0%, transparent 40%);
-    animation: particleDrift 30s ease-in-out infinite alternate;
+    animation: particleDrift 60s ease-in-out infinite alternate;
   }
   @keyframes particleDrift { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(20deg); } }
 
@@ -74,7 +74,7 @@
   .card {
     background: var(--bg-card); border:1px solid var(--border);
     border-radius: var(--radius); padding:20px 22px; margin-bottom:16px;
-    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
     transition: transform 0.3s var(--ease), border-color 0.3s var(--ease), box-shadow 0.3s var(--ease);
     position:relative; overflow:hidden;
@@ -181,6 +181,9 @@
   }
   .voice-card .voice-name { font-size:0.85rem; font-weight:700; }
   .voice-card .voice-style { font-size:0.7rem; color:var(--text-dim); margin-top:2px; }
+  .voice-preview-btn { margin-top:6px; padding:2px 10px; font-size:0.65rem; border:1px solid rgba(255,255,255,0.15); background:transparent; color:var(--accent); border-radius:6px; cursor:pointer; transition:all 0.15s; }
+  .voice-preview-btn:hover { background:rgba(74,222,128,0.1); border-color:var(--accent); }
+  .voice-preview-btn.playing { background:var(--accent); color:#0a0a0a; }
 
   /* ---- Settings ---- */
   .setting-row { display:flex; align-items:center; gap:12px; margin-top:14px; flex-wrap:wrap; }
@@ -268,7 +271,7 @@
   .progress-fill::after {
     content:''; position:absolute; right:0; top:0; bottom:0; width:24px;
     background:linear-gradient(90deg, transparent, rgba(255,255,255,0.35));
-    animation: shimmer 1.8s infinite;
+    animation: shimmer 2.5s infinite;
   }
   @keyframes shimmer { 0% { transform:translateX(-100%); } 100% { transform:translateX(500%); } }
 
@@ -317,7 +320,7 @@
     background:rgba(16, 20, 40, 0.95); border:1px solid rgba(99,140,255,0.2);
     border-radius:var(--radius-sm); padding:12px 20px;
     font-size:0.82rem; box-shadow:0 8px 32px rgba(0,0,0,0.5);
-    backdrop-filter:blur(20px);
+    backdrop-filter:blur(10px);
     animation:toastIn 0.35s var(--ease);
     display:flex; align-items:center; gap:8px; max-width:360px;
   }
@@ -538,16 +541,16 @@ function setSticker(mood) {
 function renderVoiceCards(voices) {
   const grid = document.getElementById('voiceGrid');
   const styleMap = {
-    'Yunxi':    { ico:'♂️', gender:'男', style:'温柔' },
-    'Xiaoxiao': { ico:'♀️', gender:'女', style:'温柔' },
-    'Xiaoyi':   { ico:'♀️', gender:'女', style:'活泼' },
-    'Yunyang':  { ico:'♂️', gender:'男', style:'新闻' },
-    'Xiaochen': { ico:'♀️', gender:'女', style:'成熟' },
-    'Yunfeng':  { ico:'♂️', gender:'男', style:'低沉' },
+    '云希':    { ico:'♂️', gender:'男', style:'阳光' },
+    '晓晓': { ico:'♀️', gender:'女', style:'温暖' },
+    '晓伊':   { ico:'♀️', gender:'女', style:'活泼' },
+    '云扬':  { ico:'♂️', gender:'男', style:'专业' },
+    '云健':  { ico:'♂️', gender:'男', style:'热血' },
+    '云夏':   { ico:'♂️', gender:'男', style:'可爱' },
   };
 
   grid.innerHTML = voices.map(v => {
-    const key = Object.keys(styleMap).find(k => v.label.includes(k)) || 'Yunxi';
+    const key = Object.keys(styleMap).find(k => v.label.includes(k)) || '云希';
     const s = styleMap[key];
     const sel = v.value === selectedVoice ? ' selected' : '';
     return `<div class="voice-card${sel}" data-voice="${v.value}" onclick="selectVoice('${v.value}', this)">
@@ -555,6 +558,7 @@ function renderVoiceCards(voices) {
       <div class="voice-avatar" style="background:${s.gender==='男'?'rgba(99,140,255,0.15)':'rgba(185,140,255,0.15)'}">${s.ico}</div>
       <div class="voice-name">${key}</div>
       <div class="voice-style">${s.gender}声 · ${s.style}${v.label.includes('⭐')?' · 推荐':''}</div>
+      <button class="voice-preview-btn" onclick="event.stopPropagation(); previewVoice('${v.value}', this)">▶ 试听</button>
     </div>`;
   }).join('');
 }
@@ -563,6 +567,53 @@ function selectVoice(value, el) {
   selectedVoice = value;
   document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
+}
+
+let _previewAudio = null;
+function _stopPreviewAudio() {
+  if (_previewAudio) {
+    _previewAudio.pause();
+    _previewAudio.src = '';
+    _previewAudio.onended = null;
+    _previewAudio.onerror = null;
+    _previewAudio = null;
+  }
+}
+
+async function previewVoice(voice, btn) {
+  if (btn.classList.contains('playing')) {
+    _stopPreviewAudio();
+    btn.classList.remove('playing');
+    btn.textContent = '▶ 试听';
+    return;
+  }
+  document.querySelectorAll('.voice-preview-btn').forEach(b => {
+    b.classList.remove('playing'); b.textContent = '▶ 试听';
+  });
+  _stopPreviewAudio();
+  btn.classList.add('playing');
+  btn.textContent = '⏸ 停止';
+  try {
+    const url = '/api/voice-preview?voice=' + encodeURIComponent(voice);
+    _previewAudio = new Audio(url);
+    _previewAudio.onended = () => {
+      btn.classList.remove('playing');
+      btn.textContent = '▶ 试听';
+      _stopPreviewAudio();
+    };
+    _previewAudio.onerror = () => {
+      btn.classList.remove('playing');
+      btn.textContent = '▶ 试听';
+      _stopPreviewAudio();
+      addLog('试听失败，请重试');
+    };
+    await _previewAudio.play();
+  } catch (e) {
+    btn.classList.remove('playing');
+    btn.textContent = '▶ 试听';
+    _stopPreviewAudio();
+    addLog('试听失败: ' + e.message);
+  }
 }
 
 // ============================================================
@@ -788,6 +839,7 @@ function connectAndStart(payload, retry = false) {
   };
 
   ws.onclose = (ev) => {
+    ws = null;
     const wasConverting = document.getElementById('btnStart').disabled;
     if (wasConverting && ev.code !== 1000 && reconnectAttempts < MAX_RECONNECT) {
       reconnectAttempts++;
@@ -837,12 +889,15 @@ function handleMessage(msg) {
         addLog('🎉 转换完成！输出目录: ' + (msg.output_dir || 'output/'), 'ok');
         setConverting(false);
         toast('全部完成！🎉', 'ok');
+        if (ws) { ws.close(); ws = null; }
       } else if (msg.status === 'stopped') {
         setConverting(false);
         addLog('⚠️ 转换已终止', 'warn');
+        if (ws) { ws.close(); ws = null; }
       } else if (msg.status === 'error') {
         setConverting(false);
         addLog('❌ 错误: ' + (msg.error || '未知'), 'error');
+        if (ws) { ws.close(); ws = null; }
       } else if (msg.status === 'paused') {
         addLog('⏸️ 已暂停', 'warn');
       }

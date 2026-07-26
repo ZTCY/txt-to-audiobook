@@ -13,9 +13,10 @@ import webbrowser
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Query, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+import io
 import uvicorn
 
 from .config import OUTPUT_DIR, TXT_INPUT_DIR, VOICE_DISPLAY_NAMES, RECOMMENDED_VOICES
@@ -25,6 +26,9 @@ from .pipeline import AudiobookPipeline
 from .tts.edge import EdgeTTSProvider
 
 TEMPLATE_DIR = Path(__file__).parent / "templates"
+
+# Cache for voice preview audio (voice_id -> bytes)
+_preview_cache: dict[str, bytes] = {}
 
 app = FastAPI(title="txt-to-audiobook", docs_url=None, redoc_url=None)
 
@@ -102,6 +106,61 @@ async def preview_chapters(file_path: str):
         }
     except Exception as exc:
         return {"error": str(exc)}
+
+
+@app.get("/api/voice-preview")
+async def voice_preview(voice: str = Query(...)):
+    """Generate a short preview audio clip for the given voice.
+    Cached per-voice after first generation."""
+    from .config import VOICE_CN_NAMES
+
+    # Return cached preview if available
+    if voice in _preview_cache:
+        buf = io.BytesIO(_preview_cache[voice])
+        return StreamingResponse(buf, media_type="audio/mpeg")
+
+    # Use the same edge_tts that EdgeTTSProvider patched to 96kbps
+    from .tts.edge import edge_tts as patched_edge_tts
+    cn_name = VOICE_CN_NAMES.get(voice, voice)
+    preview_text = f"你好啊，我是{cn_name}。"
+    communicate = patched_edge_tts.Communicate(preview_text, voice)
+    raw_buf = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            raw_buf.write(chunk["data"])
+    raw_buf.seek(0)
+    # Enhance with ffmpeg if available
+    import tempfile, os, subprocess
+    raw_path = None
+    enhanced_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as raw_f:
+            raw_f.write(raw_buf.read())
+            raw_path = raw_f.name
+        enhanced_path = raw_path.replace(".mp3", "_enhanced.mp3")
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-i", raw_path,
+             "-ar", "48000", "-b:a", "320k",
+             "-af", "loudnorm=I=-16:LRA=11:TP=-1.5,volume=0.8",
+             "-codec:a", "libmp3lame", "-q:a", "0",
+             enhanced_path],
+            capture_output=True, timeout=30,
+        )
+        if os.path.exists(enhanced_path) and os.path.getsize(enhanced_path) > 0:
+            audio_data = open(enhanced_path, "rb").read()
+            _preview_cache[voice] = audio_data
+            return StreamingResponse(io.BytesIO(audio_data), media_type="audio/mpeg")
+    except Exception:
+        pass
+    finally:
+        if raw_path and os.path.exists(raw_path):
+            os.unlink(raw_path)
+        if enhanced_path and os.path.exists(enhanced_path):
+            os.unlink(enhanced_path)
+    # Fallback: return raw audio
+    raw_data = raw_buf.read()
+    _preview_cache[voice] = raw_data
+    return StreamingResponse(io.BytesIO(raw_data), media_type="audio/mpeg")
 
 
 # ---------------------------------------------------------------------------
@@ -245,6 +304,10 @@ async def websocket_endpoint(ws: WebSocket):
             p.stop()
         msg_queue.put(None)
         send_task.cancel()
+        try:
+            await asyncio.wait_for(send_task, timeout=2.0)
+        except (asyncio.TimeoutError, asyncio.CancelledError):
+            pass
 
 
 # ---------------------------------------------------------------------------

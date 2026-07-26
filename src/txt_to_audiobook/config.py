@@ -10,24 +10,45 @@ OUTPUT_DIR = str(BASE_DIR / "output")
 TEMP_DIR = str(BASE_DIR / "temp")
 
 # ========== Recommended Chinese Voices ==========
+# Only voices actually available in edge-tts free API.
 RECOMMENDED_VOICES = {
-    "1": "zh-CN-YunxiNeural",      # Male - gentle (recommended)
-    "2": "zh-CN-XiaoxiaoNeural",   # Female - gentle
-    "3": "zh-CN-XiaoyiNeural",     # Female - lively
-    "4": "zh-CN-YunyangNeural",    # Male - news anchor
-    "5": "zh-CN-XiaochenNeural",   # Female - mature
-    "6": "zh-CN-YunfengNeural",    # Male - deep
+    "1": "zh-CN-YunxiNeural",       # Male - sunshine (recommended)
+    "2": "zh-CN-XiaoxiaoNeural",    # Female - warm
+    "3": "zh-CN-XiaoyiNeural",      # Female - lively
+    "4": "zh-CN-YunyangNeural",     # Male - professional
+    "5": "zh-CN-YunjianNeural",     # Male - passionate
+    "6": "zh-CN-YunxiaNeural",      # Male - cute
 }
 
-# ========== Voice Display Names (for GUI) ==========
+# ========== Voice Display Names (for Web UI) ==========
+# Key: Chinese name (Gender - style) → Value: edge-tts voice ID
 VOICE_DISPLAY_NAMES = {
-    "Yunxi (Male - Gentle) ⭐": "zh-CN-YunxiNeural",
-    "Xiaoxiao (Female - Gentle)": "zh-CN-XiaoxiaoNeural",
-    "Xiaoyi (Female - Lively)": "zh-CN-XiaoyiNeural",
-    "Yunyang (Male - News)": "zh-CN-YunyangNeural",
-    "Xiaochen (Female - Mature)": "zh-CN-XiaochenNeural",
-    "Yunfeng (Male - Deep)": "zh-CN-YunfengNeural",
+    "云希 (男·阳光) ⭐": "zh-CN-YunxiNeural",
+    "晓晓 (女·温暖)": "zh-CN-XiaoxiaoNeural",
+    "晓伊 (女·活泼)": "zh-CN-XiaoyiNeural",
+    "云扬 (男·专业)": "zh-CN-YunyangNeural",
+    "云健 (男·热血)": "zh-CN-YunjianNeural",
+    "云夏 (男·可爱)": "zh-CN-YunxiaNeural",
+}
+
+# ========== Chinese voice names (for TTS self-introduction) ==========
+VOICE_CN_NAMES = {
+    "zh-CN-YunxiNeural": "云希",
+    "zh-CN-XiaoxiaoNeural": "晓晓",
+    "zh-CN-XiaoyiNeural": "晓伊",
+    "zh-CN-YunyangNeural": "云扬",
+    "zh-CN-YunjianNeural": "云健",
+    "zh-CN-YunxiaNeural": "云夏",
 }
 
 # ========== Default voice ==========
 DEFAULT_VOICE = "zh-CN-YunxiNeural"
+
+# ========== Ensure directories exist ==========
+def ensure_dirs() -> None:
+    """Create output/ and temp/ directories if they don't exist."""
+    for d in (OUTPUT_DIR, TEMP_DIR, TXT_INPUT_DIR):
+        Path(d).mkdir(parents=True, exist_ok=True)
+
+# Run on import so the dirs are always ready
+ensure_dirs()

@@ -2,8 +2,9 @@
 output/
 temp/
 
-# Input files (user data)
-txt_input/*.txt
+# Input files (user data) — keep folder, ignore the actual .txt inside
+txt_input/*
+!txt_input/.gitkeep
 
 # Python cache
 __pycache__/

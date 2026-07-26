@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="assets/sticker1.png" width="120" alt="sticker">
-</p>
-
 <h1 align="center">🎧 txt-to-audiobook</h1>
 
 <p align="center">
@@ -49,15 +45,15 @@ MP3 输出在 `output/[书名]/`。
 
 ## 功能
 
-- **自动分章** — 识别「第X章」「第X回」「Chapter X」「第X节」
-- **长章分块** — 超过 1000 字的章节按标点断句，逐块合成后合并
-- **断点续跑** — 已完成的 chunk 自动跳过，中断不浪费
-- **实时控制** — 转换中随时暂停 / 继续 / 跳过 / 终止
-- **6 种语音** — 云希、晓晓、晓伊、云扬、云健、云夏
-- **语速调节** — `-20%` 到 `+20%`
-- **章节范围** — 只转指定区间
-- **ffmpeg 后处理** — 升频 48kHz / 320kbps + EBU R128 响度标准化
-- **manifest.json** — 记录配置、耗时、成功/失败
+- **自动分章** 📚 — 识别「第X章」「第X回」「Chapter X」「第X节」
+- **长章分块** 🧩 — 超过 1000 字的章节按标点断句，逐块合成后合并
+- **断点续跑** 🔄 — 已完成的 chunk 自动跳过，中断不浪费
+- **实时控制** ⏯️ — 转换中随时暂停 / 继续 / 跳过 / 终止
+- **6 种语音** 🎙️ — 云希、晓晓、晓伊、云扬、云健、云夏
+- **语速调节** ⏩ — `-20%` 到 `+20%`
+- **章节范围** 📖 — 只转指定区间
+- **ffmpeg 后处理** ✨ — 升频 48kHz / 320kbps + EBU R128 响度标准化
+- **manifest.json** 📋 — 记录配置、耗时、成功/失败
 
 ## 语音列表
 
@@ -162,16 +158,14 @@ Edge TTS 免费接口上限为 96kbps / 24kHz。本项目通过 ffmpeg 后处理
 
 > 需要系统安装 [ffmpeg](https://ffmpeg.org/download.html)。未安装时自动降级为原始输出，不影响使用。
 
-## Web UI 表情贴纸
-
-转换过程中，界面右下角的角色会根据状态切换表情：
-
-| 贴纸 | 状态 | 表情 |
-|------|------|------|
-| <img src="assets/sticker1.png" width="60"> | 就绪 / 完成 | 开心点赞 |
-| <img src="assets/sticker2.png" width="60"> | 暂停 | 温柔微笑 |
-| <img src="assets/sticker3.png" width="60"> | 转换中 | 托腮聆听 |
-| <img src="assets/sticker4.png" width="60"> | 错误 | 惊喜星星眼 |
+<table align="center">
+  <tr>
+    <td align="center"><img src="assets/sticker1.png" width="80"><br>就绪</td>
+    <td align="center"><img src="assets/sticker2.png" width="80"><br>暂停</td>
+    <td align="center"><img src="assets/sticker3.png" width="80"><br>转换中</td>
+    <td align="center"><img src="assets/sticker4.png" width="80"><br>出错</td>
+  </tr>
+</table>
 
 ## 背景图
 

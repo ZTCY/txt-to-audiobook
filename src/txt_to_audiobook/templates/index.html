@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>txt-to-audiobook</title>
+<style>
+  :root {
+    --bg-deep:    #080a12;
+    --bg-card:    rgba(12, 16, 32, 0.82);
+    --border:     rgba(99, 140, 255, 0.12);
+    --border-h:   rgba(99, 140, 255, 0.35);
+    --text:       #e2e6f0;
+    --text-dim:   #6b7394;
+    --text-sub:   #8a92b0;
+    --accent:     #638cff;
+    --accent-g:   #4df0b5;
+    --accent-w:   #f0b84d;
+    --accent-r:   #f0606a;
+    --accent-p:   #b98cff;
+    --radius:     14px;
+    --radius-sm:  10px;
+    --radius-xs:  6px;
+    --font:       "Inter", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    --mono:       "JetBrains Mono", "Cascadia Code", "Consolas", monospace;
+    --ease:       cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html { font-size: 15px; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg-deep) url('/assets/bg.png') center top / cover fixed no-repeat;
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Subtle sakura/particle overlay for anime vibe */
+  .anime-particles {
+    position: fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      radial-gradient(circle at 10% 20%, rgba(255, 160, 220, 0.12) 0%, transparent 25%),
+      radial-gradient(circle at 80% 70%, rgba(99, 140, 255, 0.1) 0%, transparent 30%),
+      radial-gradient(circle at 50% 50%, rgba(77, 240, 181, 0.05) 0%, transparent 40%);
+    animation: particleDrift 30s ease-in-out infinite alternate;
+  }
+  @keyframes particleDrift { from { filter: hue-rotate(0deg); } to { filter: hue-rotate(20deg); } }
+
+  /* Overlay to darken bg for readability */
+  .bg-overlay {
+    position: fixed; inset:0; z-index:0;
+    background:
+      linear-gradient(180deg, rgba(8,10,18,0.25) 0%, rgba(8,10,18,0.55) 60%, rgba(8,10,18,0.88) 100%),
+      linear-gradient(135deg, rgba(99, 140, 255, 0.05) 0%, rgba(185, 140, 255, 0.05) 100%);
+    pointer-events:none;
+  }
+
+  .app { position:relative; z-index:1; max-width:880px; margin:0 auto; padding:0 20px 60px; }
+
+  /* ---- Title ---- */
+  .title-wrap { text-align:center; padding:32px 20px 8px; }
+  .title-wrap .title-icon { font-size:42px; margin-bottom:8px; display:block; animation: bounce 2s ease-in-out infinite; }
+  .title-wrap h1 {
+    font-size:1.5rem; font-weight:800; letter-spacing:1px;
+    background:linear-gradient(135deg, var(--accent), var(--accent-p), var(--accent-g));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+  }
+  .title-wrap .subtitle { font-size:0.78rem; color:var(--text-dim); margin-top:6px; font-weight:500; letter-spacing:2px; }
+
+  /* ---- Card ---- */
+  .card {
+    background: var(--bg-card); border:1px solid var(--border);
+    border-radius: var(--radius); padding:20px 22px; margin-bottom:16px;
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04);
+    transition: transform 0.3s var(--ease), border-color 0.3s var(--ease), box-shadow 0.3s var(--ease);
+    position:relative; overflow:hidden;
+  }
+  .card:hover {
+    border-color: var(--border-h);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .card::after {
+    content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%;
+    background:radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 70%);
+    pointer-events:none; opacity:0; transition:opacity 0.3s;
+  }
+  .card:hover::after { opacity:1; }
+
+  .card-header {
+    display:flex; align-items:center; gap:10px; margin-bottom:16px;
+  }
+  .card-icon {
+    width:32px; height:32px; border-radius:var(--radius-xs);
+    display:flex; align-items:center; justify-content:center; font-size:15px;
+  }
+  .card-icon.blue   { background:rgba(99,140,255,0.15); color:var(--accent); }
+  .card-icon.green  { background:rgba(77,240,181,0.12); color:var(--accent-g); }
+  .card-icon.purple { background:rgba(185,140,255,0.12); color:var(--accent-p); }
+  .card-icon.amber  { background:rgba(240,184,77,0.12); color:var(--accent-w); }
+  .card-icon.red    { background:rgba(240,96,106,0.12); color:var(--accent-r); }
+
+  .card-label {
+    font-size:0.78rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:1.5px; color:var(--text-dim);
+  }
+
+  /* ---- Dropzone ---- */
+  .dropzone {
+    border:2px dashed rgba(99,140,255,0.2); border-radius:var(--radius-sm);
+    padding:32px 20px; text-align:center; cursor:pointer;
+    transition: all 0.3s var(--ease); position:relative;
+    background: rgba(99,140,255,0.02);
+  }
+  .dropzone:hover, .dropzone.drag-over {
+    border-color: var(--accent); background: rgba(99,140,255,0.06);
+    box-shadow: 0 0 30px rgba(99,140,255,0.08);
+  }
+  .dropzone-icon { font-size:40px; margin-bottom:10px; opacity:0.7; }
+  @keyframes bounce { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-6px); } }
+  .dropzone-text { font-size:0.88rem; color:var(--text-sub); font-weight:500; }
+  .dropzone-hint { font-size:0.72rem; color:var(--text-dim); margin-top:6px; }
+
+  .file-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; min-height:28px; }
+  .file-chip {
+    display:inline-flex; align-items:center; gap:6px;
+    background:rgba(99,140,255,0.08); border:1.5px solid rgba(99,140,255,0.15);
+    color:var(--text); padding:5px 12px; border-radius:20px; font-size:0.76rem;
+    cursor:pointer; user-select:none;
+    transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .file-chip:hover { border-color:rgba(99,140,255,0.35); background:rgba(99,140,255,0.12); }
+  .file-chip.selected {
+    background:rgba(77,240,181,0.12); border-color:var(--accent-g);
+    color:var(--accent-g);
+    box-shadow: 0 0 8px rgba(77,240,181,0.15);
+  }
+  .file-chip .rm {
+    width:18px; height:18px; border-radius:50%; background:rgba(255,255,255,0.06);
+    border:none; color:var(--text-dim); cursor:pointer; font-size:13px; line-height:1;
+    display:flex; align-items:center; justify-content:center; transition:all 0.15s;
+  }
+  .file-chip .rm:hover { background:var(--accent-r); color:#fff; }
+  .file-chip.selected .rm:hover { background:var(--accent-r); color:#fff; }
+
+  .file-actions { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+
+  /* ---- Voice cards ---- */
+  .voice-grid {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:8px;
+  }
+  .voice-card {
+    background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.06);
+    border-radius:var(--radius-sm); padding:14px; cursor:pointer;
+    transition:all 0.25s var(--ease); position:relative; text-align:center;
+    overflow:hidden;
+  }
+  .voice-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:3px;
+    background:linear-gradient(90deg, var(--accent), var(--accent-p), var(--accent-g));
+    opacity:0; transition:opacity 0.3s;
+  }
+  .voice-card:hover::before, .voice-card.selected::before { opacity:1; }
+  .voice-card:hover { background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.12); transform:translateY(-2px); }
+  .voice-card.selected {
+    background:rgba(99,140,255,0.1); border-color:var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 0 24px rgba(99,140,255,0.12);
+  }
+  .voice-card .check-mark {
+    position:absolute; top:10px; right:10px; width:18px; height:18px;
+    border-radius:50%; background:var(--accent); color:#fff; font-size:11px;
+    display:none; align-items:center; justify-content:center;
+  }
+  .voice-card.selected .check-mark { display:flex; }
+  .voice-card .voice-avatar {
+    width:40px; height:40px; border-radius:50%; margin:0 auto 8px;
+    display:flex; align-items:center; justify-content:center; font-size:18px;
+  }
+  .voice-card .voice-name { font-size:0.85rem; font-weight:700; }
+  .voice-card .voice-style { font-size:0.7rem; color:var(--text-dim); margin-top:2px; }
+
+  /* ---- Settings ---- */
+  .setting-row { display:flex; align-items:center; gap:12px; margin-top:14px; flex-wrap:wrap; }
+  .setting-row label { font-size:0.75rem; color:var(--text-dim); min-width:48px; font-weight:600; }
+
+  .custom-select { position:relative; min-width:130px; }
+  .custom-select select {
+    appearance:none; width:100%; background:rgba(255,255,255,0.04);
+    color:var(--text); border:1px solid rgba(255,255,255,0.1);
+    border-radius:var(--radius-xs); padding:8px 32px 8px 12px;
+    font-size:0.8rem; font-family:var(--font); cursor:pointer; outline:none;
+    transition:border-color 0.2s;
+  }
+  .custom-select select:focus { border-color:var(--accent); }
+  .custom-select::after {
+    content:'▾'; position:absolute; right:10px; top:50%; transform:translateY(-50%);
+    color:var(--text-dim); pointer-events:none; font-size:11px;
+  }
+
+  .range-input input {
+    width:110px; background:rgba(255,255,255,0.04); color:var(--text);
+    border:1px solid rgba(255,255,255,0.1); border-radius:var(--radius-xs);
+    padding:8px 10px; font-size:0.76rem; font-family:var(--mono); outline:none;
+  }
+  .range-input input:focus { border-color:var(--accent); }
+  .range-input input:disabled { opacity:0.3; }
+
+  /* ---- Buttons ---- */
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    border:none; border-radius:var(--radius-xs); padding:8px 16px;
+    font-size:0.78rem; font-weight:600; font-family:var(--font);
+    cursor:pointer; transition:all 0.2s var(--ease); white-space:nowrap;
+    letter-spacing:0.2px;
+  }
+  .btn:disabled { opacity:0.3; cursor:not-allowed; transform:none !important; }
+
+  .btn-pri   { background:var(--accent); color:#fff; }
+  .btn-pri:hover:not(:disabled) { background:#7b9eff; box-shadow:0 0 24px rgba(99,140,255,0.3); }
+
+  .btn-ghost { background:rgba(255,255,255,0.04); color:var(--text-sub); border:1px solid rgba(255,255,255,0.08); }
+  .btn-ghost:hover:not(:disabled) { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.15); color:#fff; }
+
+  .btn-danger { background:rgba(240,96,106,0.12); color:var(--accent-r); }
+  .btn-danger:hover:not(:disabled) { background:var(--accent-r); color:#fff; }
+
+  .btn-warn  { background:rgba(240,184,77,0.12); color:var(--accent-w); }
+  .btn-warn:hover:not(:disabled) { background:var(--accent-w); color:#0a0a0a; }
+
+  .btn-lg { padding:14px 28px; font-size:0.88rem; border-radius:var(--radius-sm); }
+  .btn-xl { padding:16px 40px; font-size:1rem; font-weight:700; border-radius:var(--radius-sm); }
+  .btn-full { width:100%; }
+
+  .btn-glow {
+    animation: btnGlow 2s ease-in-out infinite;
+  }
+  @keyframes btnGlow {
+    0%,100% { box-shadow:0 0 0 0 rgba(77,240,181,0.25); }
+    50%     { box-shadow:0 0 0 14px rgba(77,240,181,0); }
+  }
+
+  /* ---- Stats ---- */
+  .stats-row { display:grid; grid-template-columns:repeat(3, 1fr); gap:12px; }
+  .stat-item { text-align:center; padding:14px 8px; background:rgba(255,255,255,0.02); border-radius:var(--radius-sm); }
+  .stat-value {
+    font-size:1.6rem; font-weight:800; font-family:var(--mono);
+    background:linear-gradient(135deg, var(--text), var(--accent));
+    -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+    background-clip:text;
+  }
+  .stat-label { font-size:0.68rem; color:var(--text-dim); font-weight:600; text-transform:uppercase; letter-spacing:1.5px; }
+
+  /* ---- Progress ---- */
+  .progress-section { margin-top:16px; }
+  .progress-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .progress-chapter { font-size:0.8rem; font-weight:600; }
+  .progress-pct { font-size:0.78rem; color:var(--accent); font-family:var(--mono); font-weight:700; }
+
+  .progress-track { height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
+  .progress-fill {
+    height:100%; border-radius:3px;
+    background:linear-gradient(90deg, var(--accent), var(--accent-g));
+    transition:width 0.5s var(--ease); position:relative;
+  }
+  .progress-fill::after {
+    content:''; position:absolute; right:0; top:0; bottom:0; width:24px;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.35));
+    animation: shimmer 1.8s infinite;
+  }
+  @keyframes shimmer { 0% { transform:translateX(-100%); } 100% { transform:translateX(500%); } }
+
+  /* ---- Sticker ---- */
+  .sticker-box {
+    width:96px; height:96px; border-radius:var(--radius-sm); overflow:hidden;
+    margin-left:auto; flex-shrink:0; transition:all 0.4s var(--ease);
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.35));
+    position:relative;
+  }
+  .sticker-box::after {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(135deg, rgba(255,255,255,0.15), transparent 40%);
+    pointer-events:none;
+  }
+  .sticker-box img { width:100%; height:100%; object-fit:cover; }
+  .sticker-box:hover { transform:scale(1.12) rotate(-4deg); filter: drop-shadow(0 6px 18px rgba(99,140,255,0.25)); }
+
+  /* ---- Controls ---- */
+  .control-bar { display:flex; gap:8px; }
+  .control-bar .btn { flex:1; }
+
+  /* ---- Log ---- */
+  .log-wrap {
+    background:rgba(0,0,0,0.35); border:1px solid rgba(255,255,255,0.04);
+    border-radius:var(--radius-sm); height:200px; overflow-y:auto;
+    padding:12px 14px; font-family:var(--mono); font-size:0.7rem; line-height:1.7;
+  }
+  .log-wrap::-webkit-scrollbar { width:4px; }
+  .log-wrap::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
+
+  .log-entry { display:flex; gap:8px; animation:logIn 0.2s var(--ease); }
+  @keyframes logIn { from { opacity:0; transform:translateX(-8px); } }
+  .log-time { color:var(--text-dim); flex-shrink:0; font-size:0.65rem; }
+  .log-msg  { word-break:break-all; }
+  .log-msg.warn  { color:var(--accent-w); }
+  .log-msg.error { color:var(--accent-r); }
+  .log-msg.ok    { color:var(--accent-g); }
+  .log-msg.info  { color:var(--text-sub); }
+
+  .log-empty { color:var(--text-dim); font-style:italic; padding:40px 0; text-align:center; font-family:var(--font); font-size:0.8rem; }
+
+  /* ---- Toast ---- */
+  .toast {
+    position:fixed; top:20px; right:20px; z-index:100;
+    background:rgba(16, 20, 40, 0.95); border:1px solid rgba(99,140,255,0.2);
+    border-radius:var(--radius-sm); padding:12px 20px;
+    font-size:0.82rem; box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    backdrop-filter:blur(20px);
+    animation:toastIn 0.35s var(--ease);
+    display:flex; align-items:center; gap:8px; max-width:360px;
+  }
+  @keyframes toastIn { from { opacity:0; transform:translateX(40px); } }
+  .toast.hide { animation:toastOut 0.3s var(--ease) forwards; }
+  @keyframes toastOut { to { opacity:0; transform:translateX(40px); } }
+
+  /* ---- Footer ---- */
+  .footer { text-align:center; padding:32px 20px; font-size:0.7rem; color:var(--text-dim); opacity:0.5; }
+
+  /* ---- Responsive ---- */
+  @media (max-width:600px) {
+    .stats-row { grid-template-columns:1fr; }
+    .voice-grid { grid-template-columns:repeat(2,1fr); }
+    .control-bar { flex-wrap:wrap; }
+    .sticker-box { width:60px; height:60px; }
+    .title-wrap { padding:24px 14px 6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-overlay"></div>
+<div class="anime-particles"></div>
+
+<div class="app">
+
+  <!-- Title -->
+  <div class="title-wrap">
+    <span class="title-icon">🎧</span>
+    <h1>txt-to-audiobook</h1>
+  </div>
+
+  <!-- File card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon blue">📂</div>
+      <span class="card-label">选择文件</span>
+    </div>
+
+    <div class="dropzone" id="dropzone">
+      <div class="dropzone-icon">📄</div>
+      <div class="dropzone-text">拖拽 TXT 文件到这里，或点击选择</div>
+      <div class="dropzone-hint">支持 .txt · UTF-8 / GBK 编码</div>
+    </div>
+    <input type="file" id="fileInput" accept=".txt" multiple hidden>
+
+    <div class="file-chips" id="fileChips"></div>
+
+    <div class="file-actions">
+      <button class="btn btn-pri" onclick="loadInputFiles()">📁 从 txt_input 加载</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('fileInput').click()">📤 上传文件</button>
+      <button class="btn btn-ghost" id="btnClearFiles" onclick="clearAllFiles()">🗑️ 取消全选</button>
+    </div>
+  </div>
+
+  <!-- Voice card -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple">🎤</div>
+      <span class="card-label">选择语音</span>
+    </div>
+    <div class="voice-grid" id="voiceGrid"></div>
+
+    <div class="setting-row">
+      <label>⚡ 语速</label>
+      <div class="custom-select">
+        <select id="rateSelect">
+          <option value="-20%">🐌 -20%</option><option value="-15%">-15%</option>
+          <option value="-10%">-10%</option><option value="-5%">-5%</option>
+          <option value="+0%" selected>✦ +0% 正常</option>
+          <option value="+5%">+5%</option><option value="+10%">+10%</option>
+          <option value="+15%">+15%</option><option value="+20%">🚀 +20%</option>
+        </select>
+      </div>
+      <label>📚 章节</label>
+      <div class="custom-select">
+        <select id="chapterMode" onchange="toggleChapterRange()">
+          <option value="all">全部章节</option>
+          <option value="range">指定范围</option>
+        </select>
+      </div>
+      <div class="range-input">
+        <input type="text" id="chapterRange" value="1-100" placeholder="如 20-32" disabled>
+      </div>
+      <button class="btn btn-ghost" onclick="previewChapters()">🔍 预览</button>
+    </div>
+  </div>
+
+  <!-- Stats card with sticker -->
+  <div class="card" id="statsCard">
+    <div class="card-header">
+      <div class="card-icon green">📊</div>
+      <span class="card-label">状态</span>
+      <span style="margin-left:auto;font-size:0.76rem;font-weight:600;color:var(--text-sub)" id="statusText">就绪</span>
+      <div class="sticker-box" id="stickerBox">
+        <img src="/assets/sticker1.png" alt="mascot" id="stickerImg">
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-item">
+        <div class="stat-value" id="statChapters">--</div>
+        <div class="stat-label">章节</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="statDone">--</div>
+        <div class="stat-label">已完成</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-value" id="statTime">--</div>
+        <div class="stat-label">耗时</div>
+      </div>
+    </div>
+
+    <div class="progress-section" id="progressSection" style="display:none">
+      <div class="progress-header">
+        <span class="progress-chapter" id="progressLabel">--</span>
+        <span class="progress-pct" id="progressPct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon amber">🎮</div>
+      <span class="card-label">控制</span>
+    </div>
+    <div class="control-bar">
+      <button class="btn btn-warn btn-lg" id="btnPause" onclick="sendControl('pause')" disabled>⏸️ 暂停</button>
+      <button class="btn btn-danger btn-lg" id="btnStop" onclick="sendControl('stop')" disabled>⏹️ 终止</button>
+      <button class="btn btn-ghost btn-lg" id="btnSkip" onclick="sendControl('skip')" disabled>⏭️ 跳过本章</button>
+    </div>
+    <div style="margin-top:12px">
+      <button class="btn btn-pri btn-xl btn-full btn-glow" id="btnStart" onclick="startConversion()">🚀 开始转换</button>
+    </div>
+  </div>
+
+  <!-- Log -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon red">📝</div>
+      <span class="card-label">日志</span>
+      <span style="margin-left:auto;font-size:0.68rem;color:var(--text-dim);cursor:pointer" onclick="clearLog()">清除</span>
+    </div>
+    <div class="log-wrap" id="logArea">
+      <div class="log-empty">等待操作… 选择文件后点击「开始转换」</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    txt-to-audiobook · Edge TTS · 本地运行 · 隐私安全
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let ws = null;
+let availableFiles = [];     // all files from txt_input/ + uploads (for display)
+let selectedFiles = [];      // actually selected for conversion
+let selectedVoice = 'zh-CN-YunxiNeural';
+let conversionStartTime = 0;
+let completedChapters = 0;
+
+// Sticker sprite positions (4 panels in a 2x2 grid)
+// Each panel is roughly 50% of the image width/height
+// sticker1: happy (thumbs up)
+// sticker2: normal (smile)
+// sticker3: listen (thinking)
+// sticker4: excited (surprised)
+const STICKER_SRC = {
+  happy:   '/assets/sticker1.png',
+  normal:  '/assets/sticker2.png',
+  listen:  '/assets/sticker3.png',
+  excited: '/assets/sticker4.png',
+};
+
+// ============================================================
+// Init
+// ============================================================
+(async function init() {
+  const resp = await fetch('/api/voices');
+  const voices = await resp.json();
+  renderVoiceCards(voices);
+  await loadInputFiles();
+  setupDropzone();
+  setSticker('happy');
+})();
+
+// ============================================================
+// Sticker
+// ============================================================
+function setSticker(mood) {
+  const img = document.getElementById('stickerImg');
+  const box = document.getElementById('stickerBox');
+  const src = STICKER_SRC[mood] || STICKER_SRC.happy;
+  if (img.src.endsWith(src)) return;
+
+  // Fade out/in swap
+  box.style.opacity = '0.5';
+  box.style.transform = 'scale(0.9)';
+  setTimeout(() => {
+    img.src = src;
+    box.style.opacity = '1';
+    box.style.transform = 'scale(1)';
+  }, 150);
+}
+
+// ============================================================
+// Voice cards
+// ============================================================
+function renderVoiceCards(voices) {
+  const grid = document.getElementById('voiceGrid');
+  const styleMap = {
+    'Yunxi':    { ico:'♂️', gender:'男', style:'温柔' },
+    'Xiaoxiao': { ico:'♀️', gender:'女', style:'温柔' },
+    'Xiaoyi':   { ico:'♀️', gender:'女', style:'活泼' },
+    'Yunyang':  { ico:'♂️', gender:'男', style:'新闻' },
+    'Xiaochen': { ico:'♀️', gender:'女', style:'成熟' },
+    'Yunfeng':  { ico:'♂️', gender:'男', style:'低沉' },
+  };
+
+  grid.innerHTML = voices.map(v => {
+    const key = Object.keys(styleMap).find(k => v.label.includes(k)) || 'Yunxi';
+    const s = styleMap[key];
+    const sel = v.value === selectedVoice ? ' selected' : '';
+    return `<div class="voice-card${sel}" data-voice="${v.value}" onclick="selectVoice('${v.value}', this)">
+      <div class="check-mark">✓</div>
+      <div class="voice-avatar" style="background:${s.gender==='男'?'rgba(99,140,255,0.15)':'rgba(185,140,255,0.15)'}">${s.ico}</div>
+      <div class="voice-name">${key}</div>
+      <div class="voice-style">${s.gender}声 · ${s.style}${v.label.includes('⭐')?' · 推荐':''}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectVoice(value, el) {
+  selectedVoice = value;
+  document.querySelectorAll('.voice-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// ============================================================
+// File handling
+// ============================================================
+function setupDropzone() {
+  const dz = document.getElementById('dropzone');
+  const input = document.getElementById('fileInput');
+
+  dz.addEventListener('click', () => input.click());
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('drag-over');
+    handleFiles(e.dataTransfer.files);
+  });
+  input.addEventListener('change', () => { handleFiles(input.files); input.value = ''; });
+}
+
+async function handleFiles(fileList) {
+  for (const file of fileList) {
+    if (!file.name.endsWith('.txt')) continue;
+    if (availableFiles.find(f => f.name === file.name)) continue;
+    const form = new FormData(); form.append('file', file);
+    try {
+      const resp = await fetch('/api/upload', { method:'POST', body:form });
+      const data = await resp.json();
+      availableFiles.push(data);
+    } catch(e) { toast('上传失败: ' + file.name, 'error'); }
+  }
+  renderFileChips();
+}
+
+async function loadInputFiles() {
+  try {
+    const resp = await fetch('/api/files');
+    const files = await resp.json();
+    // Merge: add new ones, keep already-uploaded ones not in API list
+    const merged = [...availableFiles];
+    for (const f of files) {
+      if (!merged.find(m => m.name === f.name)) merged.push(f);
+    }
+    availableFiles = merged;
+    renderFileChips();
+  } catch(e) { toast('加载文件列表失败', 'error'); }
+}
+
+function clearAllFiles() {
+  selectedFiles = [];
+  renderFileChips();
+}
+
+function toggleFile(name) {
+  const idx = selectedFiles.findIndex(f => f.name === name);
+  if (idx >= 0) {
+    selectedFiles.splice(idx, 1);
+  } else {
+    const file = availableFiles.find(f => f.name === name);
+    if (file) selectedFiles.push(file);
+  }
+  renderFileChips();
+}
+
+function renderFileChips() {
+  const el = document.getElementById('fileChips');
+  if (availableFiles.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = availableFiles.map(f => {
+    const sel = selectedFiles.some(s => s.name === f.name);
+    return `<div class="file-chip${sel ? ' selected' : ''}" onclick="toggleFile('${f.name}')">📄 ${f.name}</div>`;
+  }).join('');
+}
+
+// ============================================================
+// Chapter preview
+// ============================================================
+function toggleChapterRange() {
+  document.getElementById('chapterRange').disabled =
+    document.getElementById('chapterMode').value === 'all';
+}
+
+async function previewChapters() {
+  if (!selectedFiles.length) { toast('请先选择文件', 'warn'); return; }
+  const fpath = selectedFiles[0].path;
+  addLog('正在解析章节…');
+  const resp = await fetch('/api/preview?' + new URLSearchParams({file_path:fpath}), { method:'POST' });
+  const data = await resp.json();
+  if (data.error) { addLog('解析失败: ' + data.error, 'error'); return; }
+
+  document.getElementById('statChapters').textContent = data.total;
+  addLog(`📚 共 ${data.total} 章`, 'ok');
+  data.preview.forEach(ch => addLog(`  ${ch.index}. ${ch.title}`));
+  if (data.total > 20) addLog(`  … 还有 ${data.total - 20} 章`);
+
+  document.getElementById('chapterMode').value = 'range';
+  toggleChapterRange();
+  document.getElementById('chapterRange').value = `1-${data.total}`;
+}
+
+// ============================================================
+// Log
+// ============================================================
+function addLog(msg, level) {
+  const area = document.getElementById('logArea');
+  const empty = area.querySelector('.log-empty');
+  if (empty) empty.remove();
+
+  const cls = level === 'error' ? 'error' : level === 'warn' ? 'warn' : level === 'ok' ? 'ok' : 'info';
+  const div = document.createElement('div');
+  div.className = 'log-entry';
+  const ts = new Date().toLocaleTimeString('zh-CN', { hour12:false });
+  div.innerHTML = `<span class="log-time">${ts}</span><span class="log-msg ${cls}">${msg}</span>`;
+  area.appendChild(div);
+  area.scrollTop = area.scrollHeight;
+}
+
+function clearLog() {
+  const area = document.getElementById('logArea');
+  area.innerHTML = '<div class="log-empty">日志已清除</div>';
+}
+
+// ============================================================
+// Toast
+// ============================================================
+function toast(msg, type) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  const icons = { error:'❌', warn:'⚠️', ok:'✅', info:'ℹ️' };
+  t.innerHTML = `${icons[type]||''} ${msg}`;
+  document.body.appendChild(t);
+  setTimeout(() => { t.classList.add('hide'); setTimeout(() => t.remove(), 400); }, 3000);
+}
+
+// ============================================================
+// Status helpers
+// ============================================================
+function setStatus(status) {
+  const txt = document.getElementById('statusText');
+  const map = {
+    ready:      ['就绪', 'happy'],
+    converting: ['转换中', 'listen'],
+    paused:     ['已暂停', 'normal'],
+    complete:   ['完成', 'excited'],
+    stopped:    ['已终止', 'normal'],
+    error:      ['错误', 'normal'],
+  };
+  const [text, mood] = map[status] || ['--', 'happy'];
+  txt.textContent = text;
+  setSticker(mood);
+}
+
+function setConverting(active) {
+  document.getElementById('btnStart').disabled = active;
+  document.getElementById('btnPause').disabled = !active;
+  document.getElementById('btnStop').disabled = !active;
+  document.getElementById('btnSkip').disabled = !active;
+
+  if (active) {
+    document.getElementById('btnStart').textContent = '⏳ 转换中…';
+    document.getElementById('btnStart').classList.remove('btn-glow');
+    document.getElementById('btnPause').textContent = '⏸️ 暂停';
+    document.getElementById('btnPause').onclick = () => sendControl('pause');
+    document.getElementById('progressSection').style.display = 'block';
+    conversionStartTime = Date.now();
+    completedChapters = 0;
+  } else {
+    document.getElementById('btnStart').textContent = '🚀 开始转换';
+    document.getElementById('btnStart').classList.add('btn-glow');
+    document.getElementById('btnPause').textContent = '⏸️ 暂停';
+    document.getElementById('btnPause').onclick = () => sendControl('pause');
+    document.getElementById('progressSection').style.display = 'none';
+  }
+}
+
+// ============================================================
+// WebSocket
+// ============================================================
+let reconnectAttempts = 0;
+const MAX_RECONNECT = 3;
+
+function startConversion() {
+  if (!selectedFiles.length) { toast('请先选择文件', 'warn'); return; }
+
+  const files = selectedFiles.map(f => f.path);
+  let startChapter = null, endChapter = null;
+  if (document.getElementById('chapterMode').value === 'range') {
+    const m = document.getElementById('chapterRange').value.match(/(\d+)-(\d+)/);
+    if (m) { startChapter = parseInt(m[1]); endChapter = parseInt(m[2]); }
+  }
+
+  const payload = {
+    action:'start',
+    voice: selectedVoice,
+    rate: document.getElementById('rateSelect').value,
+    start_chapter: startChapter,
+    end_chapter: endChapter,
+    files,
+  };
+
+  connectAndStart(payload);
+}
+
+function connectAndStart(payload, retry = false) {
+  const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+  ws.onopen = () => {
+    reconnectAttempts = 0;
+    if (!retry) {
+      addLog('连接成功，开始转换…', 'ok');
+      ws.send(JSON.stringify(payload));
+      setConverting(true);
+      setStatus('converting');
+    } else {
+      addLog('重连成功', 'ok');
+    }
+  };
+
+  ws.onmessage = (e) => { handleMessage(JSON.parse(e.data)); };
+
+  ws.onerror = (err) => {
+    addLog(`WebSocket 错误 (端口 ${location.port})`, 'error');
+    console.error('[WS]', err);
+  };
+
+  ws.onclose = (ev) => {
+    const wasConverting = document.getElementById('btnStart').disabled;
+    if (wasConverting && ev.code !== 1000 && reconnectAttempts < MAX_RECONNECT) {
+      reconnectAttempts++;
+      addLog(`连接中断，${reconnectAttempts}/${MAX_RECONNECT} 秒后重试…`, 'warn');
+      setTimeout(() => connectAndStart(payload, true), 1500 * reconnectAttempts);
+      return;
+    }
+    if (wasConverting && ev.code !== 1000) {
+      addLog('连接意外关闭', 'warn');
+    }
+    setConverting(false); setStatus('ready');
+  };
+}
+
+function handleMessage(msg) {
+  switch (msg.type) {
+    case 'log':
+      addLog(msg.message, msg.level === 'ERROR' ? 'error' : msg.level === 'WARNING' ? 'warn' : '');
+      break;
+
+    case 'progress':
+      document.getElementById('progressFill').style.width = msg.percent + '%';
+      document.getElementById('progressPct').textContent = msg.percent.toFixed(0) + '%';
+      document.getElementById('progressLabel').textContent = `第 ${msg.chapter} / ${msg.total} 章 · ${msg.title}`;
+      document.getElementById('statChapters').textContent = msg.total;
+      document.getElementById('statDone').textContent = msg.chapter - 1;
+
+      const elapsed = (Date.now() - conversionStartTime) / 1000;
+      const min = Math.floor(elapsed / 60);
+      const sec = Math.floor(elapsed % 60);
+      document.getElementById('statTime').textContent = `${min}:${String(sec).padStart(2,'0')}`;
+      break;
+
+    case 'chapter_done':
+      completedChapters++;
+      document.getElementById('statDone').textContent = completedChapters;
+      const icon = msg.success ? '✅' : '❌';
+      addLog(`${icon} ${msg.title} · ${msg.duration_s}秒 · ${msg.chunks} chunk(s)`);
+      break;
+
+    case 'status':
+      setStatus(msg.status);
+      if (msg.status === 'complete') {
+        document.getElementById('progressFill').style.width = '100%';
+        document.getElementById('progressPct').textContent = '100%';
+        document.getElementById('progressLabel').textContent = '全部完成！';
+        addLog('🎉 转换完成！输出目录: ' + (msg.output_dir || 'output/'), 'ok');
+        setConverting(false);
+        toast('全部完成！🎉', 'ok');
+      } else if (msg.status === 'stopped') {
+        setConverting(false);
+        addLog('⚠️ 转换已终止', 'warn');
+      } else if (msg.status === 'error') {
+        setConverting(false);
+        addLog('❌ 错误: ' + (msg.error || '未知'), 'error');
+      } else if (msg.status === 'paused') {
+        addLog('⏸️ 已暂停', 'warn');
+      }
+      break;
+  }
+}
+
+function sendControl(action) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ action }));
+
+  if (action === 'pause') {
+    setStatus('paused');
+    document.getElementById('btnPause').textContent = '▶️ 继续';
+    document.getElementById('btnPause').onclick = () => sendControl('resume');
+  } else if (action === 'resume') {
+    setStatus('converting');
+    document.getElementById('btnPause').textContent = '⏸️ 暂停';
+    document.getElementById('btnPause').onclick = () => sendControl('pause');
+  }
+}
+</script>
+</body>
+</html>

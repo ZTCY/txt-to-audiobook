@@ -1,0 +1,186 @@
+<p align="center">
+  <h1>🎧 txt-to-audiobook</h1>
+</p>
+
+<p align="center">
+  <strong>把 TXT 小说转成 MP3 有声书，用 Edge TTS 免费合成，零 API Key</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green?style=flat-square"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/Python-3.8+-blue?style=flat-square"></a>
+  <a href="https://github.com/rany2/edge-tts"><img src="https://img.shields.io/badge/TTS-Edge%20TTS-green?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <img src="assets/Screenshot.png" alt="Screenshot" width="80%">
+</p>
+
+---
+
+## Quick Start
+
+```bash
+git clone https://github.com/ZTCY/txt-to-audiobook.git
+cd txt-to-audiobook
+pip install edge-tts tqdm fastapi uvicorn python-multipart
+```
+
+把 TXT 扔进 `txt_input/`，然后：
+
+```bash
+# Web 界面 ⭐ 推荐
+python -m txt_to_audiobook.web
+
+# 命令行交互
+python -m txt_to_audiobook.cli
+
+# 直接指定参数
+python -m txt_to_audiobook.cli -i txt_input/novel.txt --voice zh-CN-YunxiNeural
+```
+
+浏览器打开 `http://127.0.0.1:8081`，拖拽 TXT 文件、选语音、开始转换。
+
+> Windows 用户可以双击 `run_web.bat` 或 `run_cli.bat`。
+
+MP3 输出在 `output/[书名]/`。
+
+## 功能
+
+- **自动分章** — 识别「第X章」「第X回」「Chapter X」「第X节」
+- **长章分块** — 超过 1000 字的章节按标点断句，逐块合成后合并
+- **断点续跑** — 已完成的 chunk 自动跳过，中断不浪费
+- **实时控制** — 转换中随时暂停 / 继续 / 跳过 / 终止
+- **6 种语音** — 云希、晓晓、晓伊、云扬、晓辰、云枫
+- **语速调节** — `-20%` 到 `+20%`
+- **章节范围** — 只转指定区间
+- **manifest.json** — 记录配置、耗时、成功/失败
+
+## 语音列表
+
+| 语音 | Short Name | 性别 | 风格 |
+|------|-----------|------|------|
+| 云希 ⭐ | `zh-CN-YunxiNeural` | 男 | 温柔（默认） |
+| 晓晓 | `zh-CN-XiaoxiaoNeural` | 女 | 温柔 |
+| 晓伊 | `zh-CN-XiaoyiNeural` | 女 | 活泼 |
+| 晓辰 | `zh-CN-XiaochenNeural` | 女 | 成熟 |
+| 云扬 | `zh-CN-YunyangNeural` | 男 | 新闻播报 |
+| 云枫 | `zh-CN-YunfengNeural` | 男 | 低沉 |
+
+语速建议：
+
+| 语速 | 场景 |
+|------|------|
+| -20% ~ -5% | 学习、精听 |
+| +0% | 正常听书（默认） |
+| +5% ~ +20% | 快速浏览 |
+
+```bash
+# 查看全部可用的中文语音
+python -m txt_to_audiobook.cli --list-voices
+```
+
+## CLI 参数
+
+```
+python -m txt_to_audiobook.cli [OPTIONS]
+
+  -i, --input PATH        输入 TXT
+  -o, --output PATH       输出目录（默认 ./output）
+      --voice NAME        Short Name（默认 zh-CN-YunxiNeural）
+      --rate RATE         语速（+0%, -10%, +20%）
+      --start N           起始章节
+      --end N             结束章节
+      --dry-run           只预览不生成
+      --list-voices       列出可用中文语音
+```
+
+预览模式：
+
+```bash
+python -m txt_to_audiobook.cli --dry-run -i examples/sample_zh.txt
+```
+
+```
+📄 File: sample_zh.txt
+📝 Characters: 676
+📚 Chapters: 3
+🧩 Chunks (TTS calls): 3
+⏱️  Estimated: ~6s
+```
+
+## 项目结构
+
+```
+txt-to-audiobook/
+├── src/txt_to_audiobook/
+│   ├── cli.py            # 命令行入口
+│   ├── web.py            # Web 界面（FastAPI + WebSocket）
+│   ├── config.py         # 路径、语音列表
+│   ├── models.py         # dataclass 数据模型
+│   ├── parser.py         # 文本清洗、章节检测、分块
+│   ├── pipeline.py       # 编排：暂停/停止、缓存、manifest
+│   ├── exporter.py       # MP3 合并
+│   ├── tts/
+│   │   ├── base.py       # TTSProvider 抽象接口
+│   │   └── edge.py       # Edge TTS 实现（重试 + 指数退避）
+│   └── templates/
+│       └── index.html    # Web UI 前端
+├── tests/                # 单元测试
+├── examples/sample_zh.txt
+├── run_web.bat
+├── run_cli.bat
+└── LICENSE
+```
+
+## 架构
+
+```mermaid
+graph LR
+    A[TXT 文件] --> B[parser.py<br/>清洗 + 分章]
+    B --> C[pipeline.py<br/>编排 + 缓存]
+    C --> D[tts/edge.py<br/>Edge TTS 合成]
+    D --> E[exporter.py<br/>合并 MP3]
+    E --> F[output/<br/>MP3 + manifest.json]
+```
+
+`TTSProvider` 是抽象接口，目前只有 `EdgeTTSProvider`。要接其他 TTS 引擎，只需新建实现类，pipeline 不用改。
+
+## 常见问题
+
+<details>
+<summary>转不出声音？</summary>
+
+检查网络。Edge TTS 走微软公共接口，不需要 API Key，但需要能连外网。
+</details>
+
+<details>
+<summary>章节切错了？</summary>
+
+TXT 的章节标题必须是「第X章」「第X回」「Chapter X」「第X节」之一。其他格式暂不支持。
+</details>
+
+<details>
+<summary>中断后重跑会不会从头开始？</summary>
+
+不会。pipeline 检查 `temp/` 下已有的 chunk，已完成的部分直接跳过，从断点继续。
+</details>
+
+<details>
+<summary>pip install -e . 报编码错误？</summary>
+
+路径含中文会触发 setuptools 编码问题。用 `PYTHONPATH` 代替：
+
+```bash
+set PYTHONPATH=src
+python -m txt_to_audiobook.cli
+```
+</details>
+
+## 致谢
+
+- [edge-tts](https://github.com/rany2/edge-tts) — 微软 Edge TTS 的 Python 实现
+
+## License
+
+[MIT](LICENSE)
